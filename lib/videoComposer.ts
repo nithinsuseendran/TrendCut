@@ -1,5 +1,5 @@
 import path from 'path';
-import { mkdir } from 'fs/promises';
+import { mkdir, copyFile, writeFile } from 'fs/promises';
 import { ProductInput, ScrapedContent, CreativeBrief } from './types';
 import { summarizeProduct } from './summarizeProduct';
 import { generateCreativeBrief } from './creativeBrief';
@@ -18,7 +18,7 @@ export async function generateVideo(
   product: ProductInput,
   scraped: ScrapedContent,
   userMessage: string
-): Promise<{ videoUrl: string; brief: CreativeBrief }> {
+): Promise<{ videoUrl: string; brief: CreativeBrief; warning?: string }> {
   // Step 1: Summarize the product
   let productSummary: string;
   try {
@@ -76,6 +76,8 @@ export async function generateVideo(
   await mkdir(outputDir, { recursive: true });
   const outputPath = path.join(outputDir, outputFilename);
 
+  let warning: string | undefined;
+
   try {
     await composeUGCVideo({
       backgroundPath: backgroundResult.path,
@@ -86,13 +88,41 @@ export async function generateVideo(
       outputPath,
     });
   } catch (error) {
-    console.error('Video composition failed:', error);
-    throw new Error(
-      `Video composition failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    console.warn('Video composition failed, attempting graceful fallback:', error);
+    warning = `⚠️ **FFmpeg not detected on this system.** Serving raw stock background asset without text overlays and audio. Please install FFmpeg and add it to your system PATH to enable full Gen-Z overlays and music!`;
+
+    try {
+      if (backgroundResult.path && backgroundResult.type === 'video') {
+        await copyFile(backgroundResult.path, outputPath);
+      } else if (backgroundResult.path && backgroundResult.type === 'image') {
+        // If background is an image, we can't play it directly as a video without ffmpeg.
+        // Let's download a vertical placeholder video.
+        const response = await fetch('https://placeholdervideo.dev/1080x1920');
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          await writeFile(outputPath, Buffer.from(arrayBuffer));
+        } else {
+          throw new Error('Failed to fetch fallback video from placeholdervideo.dev');
+        }
+      } else {
+        // Fallback placeholder vertical video
+        const response = await fetch('https://placeholdervideo.dev/1080x1920');
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          await writeFile(outputPath, Buffer.from(arrayBuffer));
+        } else {
+          throw new Error('Failed to fetch fallback video from placeholdervideo.dev');
+        }
+      }
+    } catch (fallbackError) {
+      console.error('Graceful video fallback failed:', fallbackError);
+      throw new Error(
+        `Video composition failed and fallback failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
-  // Step 5: Return the public URL and brief
+  // Step 5: Return the public URL, brief, and warning
   const videoUrl = `/outputs/${outputFilename}`;
-  return { videoUrl, brief };
+  return { videoUrl, brief, warning };
 }

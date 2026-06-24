@@ -56,6 +56,7 @@ function getDemoResponse(
 
     return {
       reply: `Here's your UGC video for ${name}! 🎬🔥\n\n**Creative Brief:**\n• Hook: "POV: you just found ${name} and your life changed"\n• Caption: "${name} is literally the future no cap"\n• Tone: Excited, trendy, Gen Z energy\n\n⚠️ *This is a demo on GitHub Pages. Run the app locally with API keys to generate real videos with FFmpeg.*`,
+      videoUrl: 'https://placeholdervideo.dev/1080x1920',
     };
   }
 

@@ -46,16 +46,21 @@ export async function POST(request: NextRequest) {
         }
 
         // Generate the video through the full pipeline
-        const { videoUrl, brief } = await generateVideo(
+        const { videoUrl, brief, warning } = await generateVideo(
           product,
           scraped,
           message
         );
 
         const productName = brief.productName || product.name || 'your product';
+        let reply = `Here's your UGC video for ${productName}! 🎬🔥\n\n**Creative Brief:**\n• Hook: "${brief.hook}"\n• Caption: "${brief.caption}"\n• Tone: ${brief.tone}\n• Angle: ${brief.angle}`;
+        
+        if (warning) {
+          reply += `\n\n${warning}`;
+        }
 
         return NextResponse.json({
-          reply: `Here's your UGC video for ${productName}! 🎬🔥`,
+          reply,
           videoUrl,
         });
       }
