@@ -23,6 +23,47 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/** Client-side demo responses when API is unavailable (GitHub Pages). */
+function getDemoResponse(
+  text: string,
+  isProduct: boolean
+): { reply: string; videoUrl?: string } {
+  const lower = text.toLowerCase();
+
+  if (/^(hi|hello|hey|sup|yo)\b/i.test(lower)) {
+    return {
+      reply: "Hey! 👋 Send me your product URL and I'll turn it into a short UGC-style marketing video. 🎬",
+    };
+  }
+
+  if (/(what can you do|help|how does this work)/i.test(lower)) {
+    return {
+      reply: 'I can create short UGC-style marketing videos for your product! Just send me a product description or website URL, and I\'ll analyze it, pick visuals, GIFs, and audio, then generate a trendy short video.\n\nTry something like: "I\'m building CalAI, a calorie tracking app. Here\'s the site: calai.app"',
+    };
+  }
+
+  if (isProduct) {
+    // Extract a product name from the message for a realistic demo
+    const nameMatch = text.match(
+      /(?:building|made|built|called|named)\s+(?:an?\s+)?([A-Z][a-zA-Z0-9]+)/i
+    );
+    const urlMatch = text.match(
+      /([a-zA-Z0-9][-a-zA-Z0-9]*\.(com|app|io|co|ai|dev))/i
+    );
+    const name =
+      nameMatch?.[1] ||
+      (urlMatch ? urlMatch[1].split('.')[0].charAt(0).toUpperCase() + urlMatch[1].split('.')[0].slice(1) : 'Your Product');
+
+    return {
+      reply: `Here's your UGC video for ${name}! 🎬🔥\n\n**Creative Brief:**\n• Hook: "POV: you just found ${name} and your life changed"\n• Caption: "${name} is literally the future no cap"\n• Tone: Excited, trendy, Gen Z energy\n\n⚠️ *This is a demo on GitHub Pages. Run the app locally with API keys to generate real videos with FFmpeg.*`,
+    };
+  }
+
+  return {
+    reply: "I'm not sure what you mean. Try sending me a product URL or description and I'll create a UGC-style marketing video for you!",
+  };
+}
+
 export default function HomePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,21 +151,25 @@ export default function HomePage() {
       }
 
       try {
-        const conversationHistory = [...messages, userMsg].map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
+        let data: { reply: string; videoUrl?: string };
 
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: text,
-            conversation: conversationHistory,
-          }),
-        });
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
+          });
 
-        const data: { reply: string; videoUrl?: string } = await res.json();
+          if (!res.ok) throw new Error('API unavailable');
+          data = await res.json();
+        } catch {
+          // Demo mode fallback (GitHub Pages / no backend)
+          data = getDemoResponse(text, showPipeline);
+          if (showPipeline) {
+            // Simulate pipeline delay in demo mode
+            await new Promise((r) => setTimeout(r, 4000));
+          }
+        }
 
         const assistantMsg: Message = {
           id: uid(),
@@ -135,7 +180,6 @@ export default function HomePage() {
 
         setMessages((prev) => {
           if (loadingMsg) {
-            // Replace the loading message with the real response, marking all steps as done
             return prev.map((m) =>
               m.id === loadingMsgId
                 ? {
@@ -156,7 +200,7 @@ export default function HomePage() {
           id: uid(),
           role: 'assistant',
           content:
-            'Sorry, something went wrong connecting to the server. Please try again.',
+            'Sorry, something went wrong. Please try again.',
         };
 
         setMessages((prev) => {
